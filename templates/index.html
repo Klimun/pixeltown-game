@@ -1,1 +1,542 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>PixelTown</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d0d14; color: #eee; font-family: monospace; overflow: hidden; height: 100vh; }
 
+  /* EKRANLAR */
+  .screen { display: none; flex-direction: column; height: 100vh; }
+  .screen.active { display: flex; }
+
+  /* GİRİŞ EKRANI */
+  #loginScreen {
+    align-items: center; justify-content: center; gap: 20px;
+    background: linear-gradient(135deg, #0d0d14 0%, #1a1a2e 100%);
+  }
+  .logo { font-size: 2.5rem; color: #64d9ff; text-shadow: 0 0 20px #64d9ff44; }
+  .logo span { color: #ffd700; }
+  input[type=text] {
+    background: #1e1e2e; border: 2px solid #333; color: #eee;
+    padding: 12px 16px; border-radius: 8px; font-size: 1rem;
+    width: 80vw; max-width: 300px; outline: none;
+  }
+  input[type=text]:focus { border-color: #64d9ff; }
+  .btn {
+    padding: 12px 24px; border: none; border-radius: 8px;
+    font-size: 1rem; cursor: pointer; font-family: monospace;
+    width: 80vw; max-width: 300px;
+  }
+  .btn-primary { background: #2196F3; color: #fff; }
+  .btn-green { background: #4CAF50; color: #fff; }
+  .btn-red { background: #E53935; color: #fff; }
+
+  /* LOBİ EKRANI */
+  #lobbyScreen { padding: 12px; gap: 10px; }
+  .lobby-header { display: flex; align-items: center; gap: 10px; }
+  .lobby-header h2 { color: #64d9ff; flex: 1; font-size: 1.1rem; }
+  .room-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .room-card {
+    background: #1e1e2e; border: 1px solid #333; border-radius: 8px;
+    padding: 12px; cursor: pointer; display: flex; justify-content: space-between;
+    align-items: center;
+  }
+  .room-card:active { background: #2a2a3e; }
+  .room-name { font-size: 0.95rem; color: #eee; }
+  .room-count { font-size: 0.8rem; color: #888; }
+  .empty-msg { color: #555; text-align: center; padding: 40px 0; }
+
+  /* OYUN EKRANI */
+  #gameScreen { position: relative; }
+  #topBar {
+    background: #1e1e2e; padding: 6px 10px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid #333;
+  }
+  #topBar .room-title { flex: 1; color: #64d9ff; font-size: 0.9rem; }
+  #playerCount { color: #aaa; font-size: 0.85rem; }
+
+  #gameArea { display: flex; flex: 1; overflow: hidden; }
+  #gameCanvas { display: block; flex: 1; }
+
+  #blockPanel {
+    width: 60px; background: #1e1e2e;
+    display: flex; flex-direction: column; padding: 4px; gap: 3px;
+    overflow-y: auto; border-left: 1px solid #333;
+  }
+  .block-btn {
+    width: 52px; height: 44px; border: 2px solid transparent;
+    border-radius: 6px; cursor: pointer; font-size: 0.6rem;
+    color: #fff; text-align: center; display: flex;
+    align-items: center; justify-content: center;
+    flex-direction: column; text-shadow: 0 1px 2px #000;
+  }
+  .block-btn.selected { border-color: #fff; }
+  .erase-btn {
+    background: #333; width: 52px; height: 44px;
+    border-radius: 6px; cursor: pointer; font-size: 1.2rem;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid transparent;
+  }
+  .erase-btn.selected { border-color: #fff; }
+
+  #bottomBar {
+    background: #1e1e2e; border-top: 1px solid #333;
+    display: flex; gap: 6px; padding: 6px;
+    align-items: center;
+  }
+  #dpad {
+    display: grid; grid-template-columns: repeat(3, 36px);
+    grid-template-rows: repeat(3, 36px); gap: 2px;
+  }
+  .dpad-btn {
+    background: #2a2a3e; border: none; color: #eee;
+    border-radius: 6px; font-size: 1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .dpad-btn:active { background: #3a3a5e; }
+
+  #chatArea { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  #chatMessages {
+    flex: 1; overflow-y: auto; font-size: 0.72rem;
+    color: #aaa; max-height: 60px; line-height: 1.4;
+  }
+  #chatRow { display: flex; gap: 4px; }
+  #chatInput {
+    flex: 1; background: #0d0d14; border: 1px solid #333;
+    color: #eee; padding: 6px 8px; border-radius: 6px;
+    font-size: 0.8rem; outline: none;
+  }
+  #sendBtn {
+    background: #2196F3; border: none; color: #fff;
+    padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;
+  }
+
+  /* POPUP */
+  #popup {
+    display: none; position: fixed; inset: 0;
+    background: #000a; z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  #popup.show { display: flex; }
+  .popup-box {
+    background: #1e1e2e; border-radius: 12px;
+    padding: 24px; width: 85vw; max-width: 320px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .popup-box h3 { color: #64d9ff; }
+  .popup-btns { display: flex; gap: 8px; }
+  .popup-btns .btn { width: auto; flex: 1; padding: 10px; }
+</style>
+</head>
+<body>
+
+<!-- GİRİŞ EKRANI -->
+<div id="loginScreen" class="screen active">
+  <div class="logo">🏙️ Pixel<span>Town</span></div>
+  <input type="text" id="nameInput" placeholder="Kullanıcı adın..." maxlength="16">
+  <button class="btn btn-primary" onclick="enterLobby()">Lobiye Gir →</button>
+</div>
+
+<!-- LOBİ EKRANI -->
+<div id="lobbyScreen" class="screen">
+  <div class="lobby-header">
+    <button class="btn btn-red" style="width:auto;padding:8px 12px" onclick="showScreen('loginScreen')">←</button>
+    <h2>🏙️ PixelTown Lobisi</h2>
+    <button class="btn btn-primary" style="width:auto;padding:8px 12px" onclick="loadRooms()">🔄</button>
+  </div>
+  <div id="roomList" class="room-list">
+    <p class="empty-msg">Yükleniyor...</p>
+  </div>
+  <button class="btn btn-green" onclick="showHostPopup()">+ Yeni Oda Aç</button>
+  <p id="lobbyStatus" style="font-size:0.8rem;color:#666;text-align:center"></p>
+</div>
+
+<!-- OYUN EKRANI -->
+<div id="gameScreen" class="screen">
+  <div id="topBar">
+    <button onclick="leaveGame()" style="background:#333;border:none;color:#eee;padding:6px 10px;border-radius:6px;cursor:pointer">←</button>
+    <span class="room-title" id="roomTitle">Oda</span>
+    <span id="hostBadge" style="display:none;font-size:0.75rem;color:#FFD700;margin-right:4px">👑</span>
+    <span id="playerCount">👥 0</span>
+  </div>
+  <div id="gameArea">
+    <canvas id="gameCanvas"></canvas>
+    <div id="blockPanel" id="blockPanel"></div>
+  </div>
+  <div id="bottomBar">
+    <div id="dpad">
+      <div></div>
+      <button class="dpad-btn" ontouchstart="move(0,1)" onclick="move(0,1)">▲</button>
+      <div></div>
+      <button class="dpad-btn" ontouchstart="move(-1,0)" onclick="move(-1,0)">◄</button>
+      <div></div>
+      <button class="dpad-btn" ontouchstart="move(1,0)" onclick="move(1,0)">►</button>
+      <div></div>
+      <button class="dpad-btn" ontouchstart="move(0,-1)" onclick="move(0,-1)">▼</button>
+      <div></div>
+    </div>
+    <div id="chatArea">
+      <div id="chatMessages"></div>
+      <div id="chatRow">
+        <input type="text" id="chatInput" placeholder="Mesaj..." maxlength="200"
+               onkeydown="if(event.key==='Enter') sendChat()">
+        <button id="sendBtn" onclick="sendChat()">→</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- POPUP: Oda Aç -->
+<div id="popup">
+  <div class="popup-box">
+    <h3>Yeni Oda Aç</h3>
+    <input type="text" id="roomNameInput" placeholder="Oda adı..." maxlength="30">
+    <div class="popup-btns">
+      <button class="btn btn-green" onclick="hostRoom()">Aç</button>
+      <button class="btn btn-red" onclick="hidePopup()">İptal</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------
+// Durum
+// ---------------------------------------------------------
+const TILE = 32;
+let myId = null, myName = "Oyuncu";
+let worldBlocks = {}, gamePlayers = {};
+let selectedBlock = "grass";
+let camX = 0, camY = 0;
+let ws = null;
+let blockColors = {{ block_colors|safe }};
+let chatMessages = [];
+
+// ---------------------------------------------------------
+// Ekran Yönetimi
+// ---------------------------------------------------------
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id === 'gameScreen') initCanvas();
+}
+
+function enterLobby() {
+  const n = document.getElementById('nameInput').value.trim();
+  myName = n || "Oyuncu";
+  showScreen('lobbyScreen');
+  loadRooms();
+}
+
+// ---------------------------------------------------------
+// Lobi
+// ---------------------------------------------------------
+async function loadRooms() {
+  document.getElementById('lobbyStatus').textContent = 'Odalar yükleniyor...';
+  try {
+    const r = await fetch('/api/rooms');
+    const rooms = await r.json();
+    renderRooms(rooms);
+    document.getElementById('lobbyStatus').textContent = `${rooms.length} oda bulundu`;
+  } catch(e) {
+    document.getElementById('lobbyStatus').textContent = 'Bağlantı hatası';
+  }
+}
+
+function renderRooms(rooms) {
+  const el = document.getElementById('roomList');
+  if (!rooms.length) {
+    el.innerHTML = '<p class="empty-msg">Henüz oda yok. İlk odayı sen aç!</p>';
+    return;
+  }
+  el.innerHTML = rooms.map(r => `
+    <div class="room-card" onclick="joinRoom('${r.room_id}', '${r.name}')">
+      <div>
+        <div class="room-name">🏠 ${r.name}</div>
+      </div>
+      <div class="room-count">${r.current_players}/${r.max_players}</div>
+    </div>
+  `).join('');
+}
+
+function showHostPopup() {
+  document.getElementById('roomNameInput').value = myName + "'nin Odası";
+  document.getElementById('popup').classList.add('show');
+}
+
+function hidePopup() {
+  document.getElementById('popup').classList.remove('show');
+}
+
+async function hostRoom() {
+  const name = document.getElementById('roomNameInput').value.trim() || myName + "'nin Odası";
+  hidePopup();
+  document.getElementById('lobbyStatus').textContent = 'Oda açılıyor...';
+  const r = await fetch('/api/host', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name})
+  });
+  const data = await r.json();
+  joinRoom(data.room_id, data.room_name);
+}
+
+// ---------------------------------------------------------
+// Oyuna Bağlan
+// ---------------------------------------------------------
+let isOwner = false;
+let myPlayerId = null;
+let currentRoomId = null;
+
+function joinRoom(roomId, name) {
+  currentRoomId = roomId;
+  document.getElementById('roomTitle').textContent = name;
+  showScreen('gameScreen');
+
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${location.host}/ws/${roomId}`;
+
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({type: 'join', name: myName}));
+  };
+
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    handleMessage(data);
+  };
+
+  ws.onclose = () => {
+    addChat('Sistem', 'Bağlantı kesildi.');
+  };
+}
+
+function leaveGame() {
+  if (ws) ws.close();
+  worldBlocks = {}; gamePlayers = {};
+  showScreen('lobbyScreen');
+}
+
+// ---------------------------------------------------------
+// Mesaj İşleyici
+// ---------------------------------------------------------
+function handleMessage(data) {
+  switch(data.type) {
+    case 'welcome':
+      myId = data.your_id;
+      myPlayerId = data.your_id;
+      isOwner = data.is_owner;
+      worldBlocks = data.world || {};
+      gamePlayers = {};
+      (data.players || []).forEach(p => gamePlayers[p.id] = p);
+      updateHostBadge();
+      drawWorld();
+      break;
+    case 'host_changed':
+      isOwner = (data.new_owner_id === myPlayerId);
+      updateHostBadge();
+      if (isOwner) addChat('Sistem', '👑 Artık host sizsiniz!');
+      break;
+    case 'player_joined':
+      gamePlayers[data.id] = data;
+      updatePlayerCount();
+      drawWorld();
+      break;
+    case 'player_left':
+      delete gamePlayers[data.id];
+      updatePlayerCount();
+      drawWorld();
+      addChat('Sistem', `${data.name} ayrıldı`);
+      break;
+    case 'player_moved':
+      if (gamePlayers[data.id]) {
+        gamePlayers[data.id].x = data.x;
+        gamePlayers[data.id].y = data.y;
+      }
+      drawWorld();
+      break;
+    case 'block_placed':
+      worldBlocks[`${data.x},${data.y}`] = data.block_type;
+      drawWorld();
+      break;
+    case 'block_removed':
+      delete worldBlocks[`${data.x},${data.y}`];
+      drawWorld();
+      break;
+    case 'chat_message':
+      addChat(data.from_name, data.message);
+      break;
+  }
+  updatePlayerCount();
+}
+
+// ---------------------------------------------------------
+// Canvas Çizim
+// ---------------------------------------------------------
+let canvas, ctx;
+
+function initCanvas() {
+  canvas = document.getElementById('gameCanvas');
+  const area = document.getElementById('gameArea');
+  canvas.width = area.clientWidth - 60;
+  canvas.height = area.clientHeight;
+  ctx = canvas.getContext('2d');
+
+  // Blok paneli oluştur
+  buildBlockPanel();
+
+  // Dokunma ile blok yerleştir
+  canvas.addEventListener('click', onCanvasTap);
+  canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    onCanvasTap({clientX: t.clientX, clientY: t.clientY, rect});
+  });
+
+  drawWorld();
+}
+
+function drawWorld() {
+  if (!ctx) return;
+  ctx.fillStyle = '#0d0d14';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid
+  ctx.strokeStyle = '#1a1a2e';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < canvas.width; x += TILE) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y < canvas.height; y += TILE) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  }
+
+  // Bloklar
+  for (const [key, type] of Object.entries(worldBlocks)) {
+    const [bx, by] = key.split(',').map(Number);
+    const sx = (bx - camX) * TILE;
+    const sy = canvas.height - (by - camY + 1) * TILE;
+    if (sx < -TILE || sx > canvas.width || sy < -TILE || sy > canvas.height) continue;
+    ctx.fillStyle = blockColors[type] || '#888';
+    ctx.fillRect(sx + 1, sy + 1, TILE - 2, TILE - 2);
+    // Blok kenarı
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx + 1, sy + 1, TILE - 2, TILE - 2);
+  }
+
+  // Oyuncular
+  for (const [pid, p] of Object.entries(gamePlayers)) {
+    const sx = (p.x - camX) * TILE;
+    const sy = canvas.height - (p.y - camY + 1) * TILE;
+    ctx.fillStyle = pid === myId ? '#FFD700' : '#FF5252';
+    ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
+    // İsim
+    ctx.fillStyle = '#fff';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.name, sx + TILE/2, sy - 2);
+  }
+}
+
+function onCanvasTap(e) {
+  const rect = canvas.getBoundingClientRect();
+  const tx = Math.floor((e.clientX - rect.left) / TILE) + camX;
+  const ty = Math.floor((canvas.height - (e.clientY - rect.top)) / TILE) + camY;
+
+  if (selectedBlock === 'erase') {
+    delete worldBlocks[`${tx},${ty}`];
+    ws.send(JSON.stringify({type: 'remove_block', x: tx, y: ty}));
+  } else {
+    worldBlocks[`${tx},${ty}`] = selectedBlock;
+    ws.send(JSON.stringify({type: 'place_block', x: tx, y: ty, block_type: selectedBlock}));
+  }
+  drawWorld();
+}
+
+// ---------------------------------------------------------
+// Blok Paneli
+// ---------------------------------------------------------
+function buildBlockPanel() {
+  const panel = document.getElementById('blockPanel');
+  panel.innerHTML = '';
+  for (const [type, color] of Object.entries(blockColors)) {
+    const btn = document.createElement('div');
+    btn.className = 'block-btn' + (type === selectedBlock ? ' selected' : '');
+    btn.style.background = color;
+    btn.textContent = type.slice(0,4);
+    btn.onclick = () => selectBlock(type);
+    panel.appendChild(btn);
+  }
+  const erase = document.createElement('div');
+  erase.className = 'erase-btn';
+  erase.textContent = '🗑';
+  erase.onclick = () => selectBlock('erase');
+  panel.appendChild(erase);
+}
+
+function selectBlock(type) {
+  selectedBlock = type;
+  buildBlockPanel();
+}
+
+// ---------------------------------------------------------
+// Hareket
+// ---------------------------------------------------------
+function move(dx, dy) {
+  const me = gamePlayers[myId];
+  if (!me) return;
+  me.x += dx; me.y += dy;
+  // Kamera takibi
+  const cols = Math.floor(canvas.width / TILE);
+  const rows = Math.floor(canvas.height / TILE);
+  if (me.x - camX > cols - 3) camX++;
+  if (me.x - camX < 2) camX--;
+  if (me.y - camY > rows - 3) camY++;
+  if (me.y - camY < 2) camY--;
+  ws.send(JSON.stringify({type: 'move', x: me.x, y: me.y}));
+  drawWorld();
+}
+
+// ---------------------------------------------------------
+// Sohbet
+// ---------------------------------------------------------
+function addChat(name, msg) {
+  chatMessages.push(`[${name}]: ${msg}`);
+  if (chatMessages.length > 30) chatMessages.shift();
+  const el = document.getElementById('chatMessages');
+  el.innerHTML = chatMessages.map(m => `<div>${m}</div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function sendChat() {
+  const inp = document.getElementById('chatInput');
+  const msg = inp.value.trim();
+  if (!msg || !ws) return;
+  ws.send(JSON.stringify({type: 'chat', message: msg}));
+  inp.value = '';
+}
+
+function updatePlayerCount() {
+  document.getElementById('playerCount').textContent = `👥 ${Object.keys(gamePlayers).length}`;
+}
+
+function updateHostBadge() {
+  document.getElementById('hostBadge').style.display = isOwner ? 'inline' : 'none';
+}
+
+// Klavye
+document.addEventListener('keydown', (e) => {
+  if (['ArrowUp','w','W'].includes(e.key)) move(0,1);
+  if (['ArrowDown','s','S'].includes(e.key)) move(0,-1);
+  if (['ArrowLeft','a','A'].includes(e.key)) move(-1,0);
+  if (['ArrowRight','d','D'].includes(e.key)) move(1,0);
+});
+</script>
+</body>
+  </html>
