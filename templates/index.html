@@ -252,14 +252,17 @@ function renderRooms(rooms) {
     el.innerHTML = '<p class="empty-msg">Henüz oda yok. İlk odayı sen aç!</p>';
     return;
   }
-  el.innerHTML = rooms.map(r => `
-    <div class="room-card" onclick="joinRoom('${r.room_id}', '${r.name}')">
+  el.innerHTML = rooms.map(r => {
+    const safeName = r.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    return `
+    <div class="room-card" onclick="joinRoom('${r.room_id}', '${safeName}')">
       <div>
         <div class="room-name">🏠 ${r.name}</div>
       </div>
       <div class="room-count">${r.current_players}/${r.max_players}</div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function showHostPopup() {
@@ -539,4 +542,4 @@ document.addEventListener('keydown', (e) => {
 });
 </script>
 </body>
-  </html>
+</html>
