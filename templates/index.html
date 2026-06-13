@@ -89,9 +89,9 @@
     align-items: center;
   }
   #dpad {
-    display: grid; grid-template-columns: repeat(3, 36px);
-    grid-template-rows: repeat(3, 36px); gap: 2px;
+    display: flex; gap: 4px;
   }
+  #dpad .dpad-btn { width: 44px; height: 44px; font-size: 1.2rem; }
   .dpad-btn {
     background: #2a2a3e; border: none; color: #eee;
     border-radius: 6px; font-size: 1rem; cursor: pointer;
@@ -169,15 +169,15 @@
   </div>
   <div id="bottomBar">
     <div id="dpad">
-      <div></div>
-      <button class="dpad-btn" ontouchstart="move(0,1)" onclick="move(0,1)">▲</button>
-      <div></div>
-      <button class="dpad-btn" ontouchstart="move(-1,0)" onclick="move(-1,0)">◄</button>
-      <div></div>
-      <button class="dpad-btn" ontouchstart="move(1,0)" onclick="move(1,0)">►</button>
-      <div></div>
-      <button class="dpad-btn" ontouchstart="move(0,-1)" onclick="move(0,-1)">▼</button>
-      <div></div>
+      <button class="dpad-btn"
+              ontouchstart="setInput('left',true)" ontouchend="setInput('left',false)"
+              onmousedown="setInput('left',true)" onmouseup="setInput('left',false)">◄</button>
+      <button class="dpad-btn"
+              ontouchstart="setInput('jump',true)" ontouchend="setInput('jump',false)"
+              onmousedown="setInput('jump',true)" onmouseup="setInput('jump',false)">▲</button>
+      <button class="dpad-btn"
+              ontouchstart="setInput('right',true)" ontouchend="setInput('right',false)"
+              onmousedown="setInput('right',true)" onmouseup="setInput('right',false)">►</button>
     </div>
     <div id="chatArea">
       <div id="chatMessages"></div>
@@ -337,6 +337,7 @@ function handleMessage(data) {
       gamePlayers = {};
       (data.players || []).forEach(p => gamePlayers[p.id] = p);
       updateHostBadge();
+      updateCamera();
       drawWorld();
       break;
     case 'host_changed':
@@ -355,11 +356,13 @@ function handleMessage(data) {
       drawWorld();
       addChat('Sistem', `${data.name} ayrıldı`);
       break;
-    case 'player_moved':
-      if (gamePlayers[data.id]) {
-        gamePlayers[data.id].x = data.x;
-        gamePlayers[data.id].y = data.y;
+    case 'physics_update':
+      for (const [pid, pdata] of Object.entries(data.players)) {
+        if (gamePlayers[pid]) {
+          Object.assign(gamePlayers[pid], pdata);
+        }
       }
+      updateCamera();
       drawWorld();
       break;
     case 'block_placed':
@@ -434,23 +437,35 @@ function drawWorld() {
   }
 
   // Oyuncular
+  const PW = 0.8, PH = 0.9; // PLAYER_W, PLAYER_H ile aynı
   for (const [pid, p] of Object.entries(gamePlayers)) {
     const sx = (p.x - camX) * TILE;
-    const sy = canvas.height - (p.y - camY + 1) * TILE;
+    const sy = canvas.height - (p.y + PH - camY) * TILE;
+    const w = PW * TILE, h = PH * TILE;
+
     ctx.fillStyle = pid === myId ? '#FFD700' : '#FF5252';
-    ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
+    ctx.fillRect(sx, sy, w, h);
+
+    // Yön göstergesi (küçük üçgen)
+    ctx.fillStyle = '#000';
+    if (p.facing === 'right') {
+      ctx.fillRect(sx + w - 6, sy + h/2 - 2, 4, 4);
+    } else {
+      ctx.fillRect(sx + 2, sy + h/2 - 2, 4, 4);
+    }
+
     // İsim
     ctx.fillStyle = '#fff';
     ctx.font = '9px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(p.name, sx + TILE/2, sy - 2);
+    ctx.fillText(p.name, sx + w/2, sy - 2);
   }
 }
 
 function onCanvasTap(e) {
   const rect = canvas.getBoundingClientRect();
-  const tx = Math.floor((e.clientX - rect.left) / TILE) + camX;
-  const ty = Math.floor((canvas.height - (e.clientY - rect.top)) / TILE) + camY;
+  const tx = Math.floor((e.clientX - rect.left) / TILE + camX);
+  const ty = Math.floor((canvas.height - (e.clientY - rect.top)) / TILE + camY);
 
   if (selectedBlock === 'erase') {
     delete worldBlocks[`${tx},${ty}`];
@@ -489,21 +504,42 @@ function selectBlock(type) {
 }
 
 // ---------------------------------------------------------
-// Hareket
+// Hareket — Platform Kontrolleri
 // ---------------------------------------------------------
-function move(dx, dy) {
+let inputState = {left: false, right: false, jump: false};
+
+function setInput(key, value) {
+  if (inputState[key] === value) return;
+  inputState[key] = value;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({type: 'input', ...inputState}));
+  }
+}
+
+// Klavye - basılı tutma desteği
+const keysDown = {};
+document.addEventListener('keydown', (e) => {
+  if (keysDown[e.key]) return;
+  keysDown[e.key] = true;
+  if (['ArrowLeft','a','A'].includes(e.key)) setInput('left', true);
+  if (['ArrowRight','d','D'].includes(e.key)) setInput('right', true);
+  if (['ArrowUp','w','W',' '].includes(e.key)) setInput('jump', true);
+});
+document.addEventListener('keyup', (e) => {
+  keysDown[e.key] = false;
+  if (['ArrowLeft','a','A'].includes(e.key)) setInput('left', false);
+  if (['ArrowRight','d','D'].includes(e.key)) setInput('right', false);
+  if (['ArrowUp','w','W',' '].includes(e.key)) setInput('jump', false);
+});
+
+function updateCamera() {
   const me = gamePlayers[myId];
-  if (!me) return;
-  me.x += dx; me.y += dy;
-  // Kamera takibi
-  const cols = Math.floor(canvas.width / TILE);
-  const rows = Math.floor(canvas.height / TILE);
-  if (me.x - camX > cols - 3) camX++;
-  if (me.x - camX < 2) camX--;
-  if (me.y - camY > rows - 3) camY++;
-  if (me.y - camY < 2) camY--;
-  ws.send(JSON.stringify({type: 'move', x: me.x, y: me.y}));
-  drawWorld();
+  if (!me || !canvas) return;
+  const cols = canvas.width / TILE;
+  const rows = canvas.height / TILE;
+  // Karakteri ekranın yatayda ortasına, dikeyde biraz altına hedefle
+  camX = me.x - cols / 2;
+  camY = me.y - rows / 2.5;
 }
 
 // ---------------------------------------------------------
@@ -542,4 +578,4 @@ document.addEventListener('keydown', (e) => {
 });
 </script>
 </body>
-</html>
+     </html>
