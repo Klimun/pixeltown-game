@@ -99,6 +99,7 @@
     background: #2a2a3e; border: none; color: #eee;
     border-radius: 6px; font-size: 1rem; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
+    touch-action: none; user-select: none; -webkit-user-select: none;
   }
   .dpad-btn:active { background: #3a3a5e; }
 
@@ -172,15 +173,9 @@
   </div>
   <div id="bottomBar">
     <div id="dpad">
-      <button class="dpad-btn"
-              ontouchstart="setInput('left',true)" ontouchend="setInput('left',false)"
-              onmousedown="setInput('left',true)" onmouseup="setInput('left',false)">◄</button>
-      <button class="dpad-btn"
-              ontouchstart="setInput('jump',true)" ontouchend="setInput('jump',false)"
-              onmousedown="setInput('jump',true)" onmouseup="setInput('jump',false)">▲</button>
-      <button class="dpad-btn"
-              ontouchstart="setInput('right',true)" ontouchend="setInput('right',false)"
-              onmousedown="setInput('right',true)" onmouseup="setInput('right',false)">►</button>
+      <button class="dpad-btn" data-key="left">◄</button>
+      <button class="dpad-btn" data-key="jump">▲</button>
+      <button class="dpad-btn" data-key="right">►</button>
     </div>
     <div id="chatArea">
       <div id="chatMessages"></div>
@@ -219,6 +214,82 @@ let blockColors = {{ block_colors|safe }};
 let chatMessages = [];
 
 // ---------------------------------------------------------
+// Client-Side Fizik (Sunucu ile aynı oranlarda, anlık tepki için)
+// Sunucu: 20Hz tick. tile/tick * 20 = tile/sec dönüşümü yapıldı.
+// ---------------------------------------------------------
+const GRAVITY_ACC   = 0.018 * 400; // 7.2 tile/sec^2
+const JUMP_VEL      = 0.38 * 20;   // 7.6 tile/sec
+const MOVE_SPEED    = 0.06 * 20;   // 1.2 tile/sec
+const MAX_FALL      = 0.6 * 20;    // 12 tile/sec
+const PLAYER_W = 0.8, PLAYER_H = 0.9;
+const EPS = 1e-6;
+
+const SOLID_TYPES = new Set(Object.keys(blockColors).filter(t => t !== 'water'));
+
+function isSolidClient(x, y) {
+  const key = `${Math.floor(x)},${Math.floor(y)}`;
+  return SOLID_TYPES.has(worldBlocks[key]);
+}
+
+function checkCollisionClient(x, y, w, h) {
+  const x0 = Math.floor(x + EPS), x1 = Math.floor(x + w - EPS);
+  const y0 = Math.floor(y + EPS), y1 = Math.floor(y + h - EPS);
+  for (let tx = x0; tx <= x1; tx++) {
+    for (let ty = y0; ty <= y1; ty++) {
+      if (tx < x + w - EPS && tx + 1 > x + EPS &&
+          ty < y + h - EPS && ty + 1 > y + EPS) {
+        if (isSolidClient(tx, ty)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Yerel oyuncu fizik adımı (dt = saniye)
+function clientPhysicsStep(dt) {
+  const me = gamePlayers[myId];
+  if (!me) return;
+
+  let vx = 0;
+  if (inputState.left) vx -= MOVE_SPEED;
+  if (inputState.right) vx += MOVE_SPEED;
+
+  let vy = (me.vy || 0) - GRAVITY_ACC * dt;
+  if (vy < -MAX_FALL) vy = -MAX_FALL;
+
+  if (inputState.jump && me.on_ground) {
+    vy = JUMP_VEL;
+    me.on_ground = false;
+  }
+
+  let x = me.x, y = me.y;
+
+  // Yatay
+  if (vx !== 0) {
+    const newX = x + vx * dt;
+    if (!checkCollisionClient(newX, y, PLAYER_W, PLAYER_H)) x = newX;
+  }
+
+  // Dikey
+  let onGround = false;
+  if (vy !== 0) {
+    const newY = y + vy * dt;
+    if (checkCollisionClient(x, newY, PLAYER_W, PLAYER_H)) {
+      vy = 0;
+      if (newY < y) onGround = true; // aşağı çarptı = yerde
+    } else {
+      y = newY;
+    }
+  } else {
+    if (checkCollisionClient(x, y - 0.05, PLAYER_W, PLAYER_H)) onGround = true;
+  }
+
+  me.x = x; me.y = y; me.vy = vy; me.on_ground = onGround;
+  if (vx > 0) me.facing = 'right';
+  else if (vx < 0) me.facing = 'left';
+}
+
+// ---------------------------------------------------------
 // Ekran Yönetimi
 // ---------------------------------------------------------
 function showScreen(id) {
@@ -237,15 +308,27 @@ function enterLobby() {
 // ---------------------------------------------------------
 // Lobi
 // ---------------------------------------------------------
-async function loadRooms() {
-  document.getElementById('lobbyStatus').textContent = 'Odalar yükleniyor...';
+async function loadRooms(retryCount = 0) {
+  const MAX_RETRIES = 8;
+  if (retryCount === 0) {
+    document.getElementById('lobbyStatus').textContent = 'Odalar yükleniyor...';
+  } else {
+    document.getElementById('lobbyStatus').textContent =
+      `Sunucu uyandırılıyor... (${retryCount}/${MAX_RETRIES})`;
+  }
   try {
     const r = await fetch('/api/rooms');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const rooms = await r.json();
     renderRooms(rooms);
     document.getElementById('lobbyStatus').textContent = `${rooms.length} oda bulundu`;
   } catch(e) {
-    document.getElementById('lobbyStatus').textContent = 'Bağlantı hatası';
+    if (retryCount < MAX_RETRIES) {
+      setTimeout(() => loadRooms(retryCount + 1), 4000);
+    } else {
+      document.getElementById('lobbyStatus').textContent =
+        'Bağlantı hatası — 🔄 ile tekrar deneyin';
+    }
   }
 }
 
@@ -319,12 +402,49 @@ function joinRoom(roomId, name) {
   ws.onclose = () => {
     addChat('Sistem', 'Bağlantı kesildi.');
   };
+
+  startRenderLoop();
 }
 
 function leaveGame() {
   if (ws) ws.close();
+  stopRenderLoop();
   worldBlocks = {}; gamePlayers = {};
+  myId = null;
   showScreen('lobbyScreen');
+}
+
+// ---------------------------------------------------------
+// Render Döngüsü (60fps, yerel fizik + çizim)
+// ---------------------------------------------------------
+let rafId = null;
+let lastFrameTime = null;
+
+function startRenderLoop() {
+  if (rafId) return;
+  lastFrameTime = performance.now();
+  rafId = requestAnimationFrame(renderFrame);
+}
+
+function stopRenderLoop() {
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+}
+
+function renderFrame(now) {
+  let dt = (now - lastFrameTime) / 1000;
+  lastFrameTime = now;
+  if (dt > 0.05) dt = 0.05; // sekme değişimi gibi büyük sıçramaları sınırla
+
+  if (myId && gamePlayers[myId]) {
+    clientPhysicsStep(dt);
+    updateCamera();
+  }
+  drawWorld();
+
+  rafId = requestAnimationFrame(renderFrame);
 }
 
 // ---------------------------------------------------------
@@ -361,12 +481,23 @@ function handleMessage(data) {
       break;
     case 'physics_update':
       for (const [pid, pdata] of Object.entries(data.players)) {
-        if (gamePlayers[pid]) {
+        if (!gamePlayers[pid]) continue;
+        if (pid === myId) {
+          // Kendi oyuncumuz: yumuşak düzeltme (drift correction)
+          const me = gamePlayers[pid];
+          const dx = pdata.x - me.x, dy = pdata.y - me.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 1.0) {
+            Object.assign(me, pdata);  // büyük fark - anında düzelt
+          } else if (dist > 0.01) {
+            me.x += dx * 0.15;
+            me.y += dy * 0.15;
+            me.on_ground = pdata.on_ground;
+          }
+        } else {
           Object.assign(gamePlayers[pid], pdata);
         }
       }
-      updateCamera();
-      drawWorld();
       break;
     case 'block_placed':
       worldBlocks[`${data.x},${data.y}`] = data.block_type;
@@ -518,6 +649,29 @@ function setInput(key, value) {
     ws.send(JSON.stringify({type: 'input', ...inputState}));
   }
 }
+
+// D-pad: pointer events (touch + mouse birleşik), basılı tutma ve
+// parmağın butondan kayması/ekrandan çıkması durumlarını da yakalar
+document.querySelectorAll('#dpad .dpad-btn').forEach(btn => {
+  const key = btn.dataset.key;
+  const press = (e) => { e.preventDefault(); setInput(key, true); };
+  const release = (e) => { e.preventDefault(); setInput(key, false); };
+  btn.addEventListener('pointerdown', press);
+  btn.addEventListener('pointerup', release);
+  btn.addEventListener('pointercancel', release);
+  btn.addEventListener('pointerleave', release);
+  btn.addEventListener('pointerout', release);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+});
+
+// Sayfa arka plana alınırsa tüm tuşları bırak (takılı kalmasın)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    setInput('left', false);
+    setInput('right', false);
+    setInput('jump', false);
+  }
+});
 
 // Klavye - basılı tutma desteği
 const keysDown = {};
