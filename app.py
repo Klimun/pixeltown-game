@@ -233,6 +233,8 @@ def physics_loop(room_id):
                 print(f"[!] Broadcast hatası ({room_id}): {e}")
 
 
+def cleanup_empty_rooms():
+    """Uzun süre (ROOM_EMPTY_TIMEOUT) boş kalan odaları sil."""
     now = time.time()
     with rooms_lock:
         to_delete = []
