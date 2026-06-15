@@ -72,7 +72,7 @@
   #topBar .room-title { flex: 1; color: #64d9ff; font-size: 0.9rem; }
   #playerCount { color: #aaa; font-size: 0.85rem; }
 
-  #gameArea { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  #gameArea { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; }
   #gameCanvas { display: block; flex: 1; min-width: 0; }
 
   #blockPanel {
@@ -98,14 +98,14 @@
 
   #bottomBar {
     background: #1e1e2e; border-top: 1px solid #333;
-    display: flex; gap: 6px; padding: 6px;
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 6px;
     align-items: center;
     flex-shrink: 0;
   }
   #dpad {
-    display: flex; gap: 4px;
+    display: flex; gap: 3px;
   }
-  #dpad .dpad-btn { width: 44px; height: 44px; font-size: 1.2rem; }
+  #dpad .dpad-btn { width: 42px; height: 42px; font-size: 1.1rem; }
   .dpad-btn {
     background: #2a2a3e; border: none; color: #eee;
     border-radius: 6px; font-size: 1rem; cursor: pointer;
@@ -114,7 +114,26 @@
   }
   .dpad-btn:active { background: #3a3a5e; }
 
-  #chatArea { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  /* SAĞ ALT EYLEM BUTONLARI (Zıplama / Etkileşim) */
+  #actionPad {
+    position: absolute;
+    right: 68px; bottom: 12px;
+    display: flex; flex-direction: column; gap: 10px;
+    z-index: 5;
+  }
+  .action-btn {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: rgba(42,42,62,0.85); border: 2px solid #444;
+    color: #eee; font-size: 1.5rem;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .action-btn:active { background: rgba(58,58,94,0.95); }
+  #jumpBtn { color: #FFD700; }
+  #interactBtn { color: #64d9ff; font-size: 1.3rem; }
+
+  #chatArea { flex: 1 1 160px; min-width: 160px; display: flex; flex-direction: column; gap: 4px; }
   #chatMessages {
     flex: 1; min-height: 0; overflow-y: auto; font-size: 0.72rem;
     color: #aaa; max-height: 60px; line-height: 1.4;
@@ -181,11 +200,16 @@
   <div id="gameArea">
     <canvas id="gameCanvas"></canvas>
     <div id="blockPanel" id="blockPanel"></div>
+    <div id="actionPad">
+      <button class="action-btn dpad-btn" id="jumpBtn" data-key="jump">⤴</button>
+      <button class="action-btn" id="interactBtn">✋</button>
+    </div>
   </div>
   <div id="bottomBar">
     <div id="dpad">
       <button class="dpad-btn" data-key="left">◄</button>
-      <button class="dpad-btn" data-key="jump">▲</button>
+      <button class="dpad-btn" data-key="up">👁⬆</button>
+      <button class="dpad-btn" data-key="down">👁⬇</button>
       <button class="dpad-btn" data-key="right">►</button>
     </div>
     <div id="chatArea">
@@ -223,6 +247,7 @@ let camX = 0, camY = 0;
 let ws = null;
 let blockColors = {{ block_colors|safe }};
 let chatMessages = [];
+let interactEffects = {}; // {playerId: timestamp} - geçici "✋" göstergesi için
 
 // ---------------------------------------------------------
 // Client-Side Fizik (Sunucu ile aynı oranlarda, anlık tepki için)
@@ -298,6 +323,11 @@ function clientPhysicsStep(dt) {
   me.x = x; me.y = y; me.vy = vy; me.on_ground = onGround;
   if (vx > 0) me.facing = 'right';
   else if (vx < 0) me.facing = 'left';
+
+  // Bakış yönü (yukarı bak / eğil) - anlık yerel geri bildirim için
+  if (inputState.up) me.look = 'up';
+  else if (inputState.down) me.look = 'down';
+  else me.look = 'normal';
 }
 
 // ---------------------------------------------------------
@@ -521,6 +551,9 @@ function handleMessage(data) {
     case 'chat_message':
       addChat(data.from_name, data.message);
       break;
+    case 'player_interact':
+      interactEffects[data.id] = performance.now();
+      break;
   }
   updatePlayerCount();
 }
@@ -583,6 +616,7 @@ function drawWorld() {
 
   // Oyuncular
   const PW = 0.8, PH = 0.9; // PLAYER_W, PLAYER_H ile aynı
+  const now = performance.now();
   for (const [pid, p] of Object.entries(gamePlayers)) {
     const sx = (p.x - camX) * TILE;
     const sy = canvas.height - (p.y + PH - camY) * TILE;
@@ -597,6 +631,25 @@ function drawWorld() {
       ctx.fillRect(sx + w - 6, sy + h/2 - 2, 4, 4);
     } else {
       ctx.fillRect(sx + 2, sy + h/2 - 2, 4, 4);
+    }
+
+    // Göz (bakış yönü testi: yukarı bak / eğil -> göz bebeği yukarı/aşağı kayar)
+    const eyeSize = 7;
+    const eyeX = p.facing === 'right' ? sx + w - eyeSize - 3 : sx + 3;
+    const eyeY = sy + 5;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(eyeX, eyeY, eyeSize, eyeSize);
+    let pupilOffset = eyeSize / 2 - 1; // normal: ortada
+    if (p.look === 'up') pupilOffset = 1;
+    else if (p.look === 'down') pupilOffset = eyeSize - 2;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(eyeX + eyeSize/2 - 1, eyeY + pupilOffset, 2, 2);
+
+    // Etkileşim göstergesi (kısa süreli "✋")
+    if (interactEffects[p.id] && now - interactEffects[p.id] < 600) {
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('✋', sx + w/2, sy - 14);
     }
 
     // İsim
@@ -651,7 +704,7 @@ function selectBlock(type) {
 // ---------------------------------------------------------
 // Hareket — Platform Kontrolleri
 // ---------------------------------------------------------
-let inputState = {left: false, right: false, jump: false};
+let inputState = {left: false, right: false, jump: false, up: false, down: false};
 
 function setInput(key, value) {
   if (inputState[key] === value) return;
@@ -667,9 +720,11 @@ function releaseAllInputs() {
   setInput('left', false);
   setInput('right', false);
   setInput('jump', false);
+  setInput('up', false);
+  setInput('down', false);
 }
 
-document.querySelectorAll('#dpad .dpad-btn').forEach(btn => {
+document.querySelectorAll('.dpad-btn').forEach(btn => {
   const key = btn.dataset.key;
   const press = (e) => { e.preventDefault(); setInput(key, true); };
   const release = (e) => { e.preventDefault(); setInput(key, false); };
@@ -698,6 +753,30 @@ document.querySelectorAll('#dpad .dpad-btn').forEach(btn => {
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 });
 
+// Etkileşim butonu: basılı tutma değil, tek seferlik "tap" sinyali gönderir
+const interactBtn = document.getElementById('interactBtn');
+if (interactBtn) {
+  const triggerInteract = (e) => {
+    e.preventDefault();
+    sendInteract();
+  };
+  interactBtn.addEventListener('pointerdown', triggerInteract);
+  interactBtn.addEventListener('touchstart', triggerInteract, {passive: false});
+  interactBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+let lastInteractTime = 0;
+function sendInteract() {
+  const now = performance.now();
+  if (now - lastInteractTime < 150) return; // pointer+touch çift tetiklemesini önle
+  lastInteractTime = now;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({type: 'interact'}));
+  }
+  // Kendi karakterimiz için de anında görsel geri bildirim (gecikme olmadan)
+  if (myId) interactEffects[myId] = now;
+}
+
 // GÜVENLİK AĞI: ekranda hiç dokunuş kalmadıysa tüm hareket tuşlarını
 // zorla bırak (herhangi bir buton kendi release olayını kaçırırsa bile)
 document.addEventListener('touchend', (e) => {
@@ -720,13 +799,18 @@ document.addEventListener('keydown', (e) => {
   keysDown[e.key] = true;
   if (['ArrowLeft','a','A'].includes(e.key)) setInput('left', true);
   if (['ArrowRight','d','D'].includes(e.key)) setInput('right', true);
-  if (['ArrowUp','w','W',' '].includes(e.key)) setInput('jump', true);
+  if ([' '].includes(e.key)) setInput('jump', true);
+  if (['ArrowUp','w','W'].includes(e.key)) setInput('up', true);
+  if (['ArrowDown','s','S'].includes(e.key)) setInput('down', true);
+  if (['e','E','f','F'].includes(e.key)) sendInteract();
 });
 document.addEventListener('keyup', (e) => {
   keysDown[e.key] = false;
   if (['ArrowLeft','a','A'].includes(e.key)) setInput('left', false);
   if (['ArrowRight','d','D'].includes(e.key)) setInput('right', false);
-  if (['ArrowUp','w','W',' '].includes(e.key)) setInput('jump', false);
+  if ([' '].includes(e.key)) setInput('jump', false);
+  if (['ArrowUp','w','W'].includes(e.key)) setInput('up', false);
+  if (['ArrowDown','s','S'].includes(e.key)) setInput('down', false);
 });
 
 function updateCamera() {
