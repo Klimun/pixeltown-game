@@ -1,2 +1,4 @@
 flask
 flask-sock
+flask-sqlalchemy
+psycopg2-binary
