@@ -100,6 +100,60 @@
   .toggle-row input { width: auto; }
   .profile-content h3 { color: #64d9ff; font-size: 0.9rem; margin-top: 8px; }
 
+  /* SKİN EDİTÖRÜ */
+  #skinEditorScreen { padding: 0; }
+  #skinEditorBody {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 10px; overflow-y: auto; flex: 1;
+  }
+  #skinCanvasWrap {
+    display: flex; justify-content: center; align-items: flex-start;
+    gap: 14px; flex-wrap: wrap;
+  }
+  #skinCanvas {
+    width: 256px; height: 256px; max-width: 70vw; max-height: 70vw;
+    background:
+      linear-gradient(45deg, #2a2a3e 25%, transparent 25%, transparent 75%, #2a2a3e 75%),
+      linear-gradient(45deg, #2a2a3e 25%, transparent 25%, transparent 75%, #2a2a3e 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+    background-color: #1a1a2e;
+    border: 2px solid #444; border-radius: 6px;
+    touch-action: none; image-rendering: pixelated;
+  }
+  #skinPreviewCanvas {
+    width: 80px; height: 80px;
+    background: #1a1a2e; border: 2px solid #444; border-radius: 6px;
+    image-rendering: pixelated;
+  }
+  #skinPartTabs {
+    display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
+  }
+  .skin-part-tab {
+    background: #1e1e2e; border: 2px solid #333; color: #ccc;
+    padding: 6px 10px; border-radius: 8px; font-size: 0.78rem;
+    font-family: monospace; cursor: pointer;
+  }
+  .skin-part-tab.active { border-color: #64d9ff; color: #64d9ff; background: #1a2733; }
+  #skinToolbar { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .skin-tool-btn {
+    background: #1e1e2e; border: 2px solid #333; color: #ccc;
+    padding: 8px 12px; border-radius: 8px; font-size: 0.8rem;
+    font-family: monospace; cursor: pointer;
+  }
+  .skin-tool-btn.active { border-color: #4CAF50; color: #4CAF50; }
+  #skinColorPicker {
+    width: 80vw; max-width: 300px; height: 40px; align-self: center;
+    border: none; border-radius: 8px; background: none;
+  }
+  #skinPalette {
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; padding: 0 8px;
+  }
+  .skin-palette-swatch {
+    width: 26px; height: 26px; border-radius: 5px; border: 2px solid #333;
+    cursor: pointer;
+  }
+
   /* LOBİ EKRANI */
   #lobbyScreen { padding: 12px; gap: 10px; }
   .lobby-header { display: flex; align-items: center; gap: 10px; }
@@ -317,7 +371,47 @@
     <p class="empty-msg">Yükleniyor...</p>
   </div>
   <button class="btn btn-green" onclick="showHostPopup()">+ Yeni Oda Aç</button>
+  <button class="btn btn-primary" onclick="openSkinEditor()">🎨 Karakterimi Düzenle</button>
   <p id="lobbyStatus" style="font-size:0.8rem;color:#666;text-align:center"></p>
+</div>
+
+<!-- SKİN EDİTÖRÜ EKRANI -->
+<div id="skinEditorScreen" class="screen">
+  <div class="lobby-header">
+    <button class="btn btn-red" style="width:auto;padding:8px 12px" onclick="closeSkinEditor()">←</button>
+    <h2>🎨 Karakter Düzenle</h2>
+    <button class="btn btn-green" style="width:auto;padding:8px 12px;font-size:0.85rem" onclick="saveSkin()">Kaydet</button>
+  </div>
+
+  <div id="skinEditorBody">
+    <div id="skinCanvasWrap">
+      <canvas id="skinCanvas" width="256" height="256"></canvas>
+      <canvas id="skinPreviewCanvas" width="64" height="64"></canvas>
+    </div>
+
+    <div id="skinPartTabs">
+      <button class="skin-part-tab active" data-part="background">🖼️ Arkaplan</button>
+      <button class="skin-part-tab" data-part="head">😀 Kafa</button>
+      <button class="skin-part-tab" data-part="torso">👕 Gövde</button>
+      <button class="skin-part-tab" data-part="leftArm">💪 Sol Kol</button>
+      <button class="skin-part-tab" data-part="rightArm">💪 Sağ Kol</button>
+      <button class="skin-part-tab" data-part="leftLeg">🦵 Sol Bacak</button>
+      <button class="skin-part-tab" data-part="rightLeg">🦵 Sağ Bacak</button>
+    </div>
+
+    <div id="skinToolbar">
+      <button class="skin-tool-btn active" id="toolPaint" onclick="setSkinTool('paint')">✏️ Boya</button>
+      <button class="skin-tool-btn" id="toolErase" onclick="setSkinTool('erase')">🧹 Sil</button>
+      <button class="skin-tool-btn" onclick="clearSkinPart()">🗑️ Parçayı Temizle</button>
+    </div>
+
+    <input type="color" id="skinColorPicker" value="#FF5252">
+    <div id="skinPalette"></div>
+
+    <p id="skinHint" style="font-size:0.75rem;color:#888;text-align:center;padding:0 12px">
+      Arkaplan katmanı dekoratiftir, çarpışmaya girmez. Diğer parçalar karakterinin hareket eden vücudunu oluşturur.
+    </p>
+  </div>
 </div>
 
 <!-- OYUN EKRANI -->
@@ -386,6 +480,32 @@
 const TILE = 32;
 let myId = null, myName = "Oyuncu";
 let currentUser = null; // giriş yapılmış hesap (varsa) - { id, email, original_name, username, profile_picture, privacy_settings }
+
+// ---------------------------------------------------------
+// Skin Sistemi — Tuval Düzeni (256x256, 1 blok = 64px)
+// ---------------------------------------------------------
+// Hitbox'a dahil olan parçalar: head, torso, leftArm, rightArm, leftLeg, rightLeg
+// Background: tamamen dekoratif, çarpışmaya girmez, tüm tuvali kaplar.
+const SKIN_SIZE = 256;
+const SKIN_PARTS = {
+  background: { x: 0,   y: 0,   w: 256, h: 256, hitbox: false },
+  head:       { x: 88,  y: 32,  w: 80,  h: 80,  hitbox: true  },
+  torso:      { x: 96,  y: 112, w: 64,  h: 64,  hitbox: true  },
+  leftArm:    { x: 64,  y: 112, w: 32,  h: 64,  hitbox: true  },
+  rightArm:   { x: 160, y: 112, w: 32,  h: 64,  hitbox: true  },
+  leftLeg:    { x: 96,  y: 176, w: 32,  h: 48,  hitbox: true  },
+  rightLeg:   { x: 128, y: 176, w: 32,  h: 48,  hitbox: true  },
+};
+const SKIN_PALETTE = [
+  '#FFFFFF','#000000','#FF5252','#FF9800','#FFD700','#4CAF50',
+  '#2196F3','#64d9ff','#9C27B0','#795548','#FFCC80','#8D6E63',
+];
+const SKIN_STORAGE_KEY = 'pixeltown_skin_v1';
+
+let skinData = null;        // { partName: ImageData-benzeri piksel dizisi (base64 PNG per part) } -- aşağıda detaylandırılacak
+let skinActivePart = 'background';
+let skinTool = 'paint';
+let skinPixelSize = 4;      // tuval üstünde her "mantıksal piksel" kaç ekran pikseli (256/64 gibi - gerçek çözünürlük altta)
 let worldBlocks = {}, gamePlayers = {};
 let selectedBlock = "grass";
 let camX = 0, camY = 0;
@@ -796,7 +916,10 @@ function joinRoom(roomId, name) {
   ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
-    ws.send(JSON.stringify({type: 'join', name: myName}));
+    const mySkin = (window.localSkinImage && window.localSkinImage.complete && window.localSkinImage.naturalWidth)
+      ? window.localSkinImage.src
+      : null;
+    ws.send(JSON.stringify({type: 'join', name: myName, skin: mySkin}));
   };
 
   ws.onmessage = (e) => {
@@ -855,6 +978,18 @@ function renderFrame(now) {
 // ---------------------------------------------------------
 // Mesaj İşleyici
 // ---------------------------------------------------------
+// Diğer oyuncuların skin görsellerini önbellekte tutar: { playerId: HTMLImageElement }
+const otherPlayerSkinCache = {};
+
+function ensurePlayerSkinLoaded(p) {
+  if (!p || !p.skin) return;
+  const cached = otherPlayerSkinCache[p.id];
+  if (cached && cached.src === p.skin) return; // zaten yüklü ve aynı
+  const img = new Image();
+  img.src = p.skin;
+  otherPlayerSkinCache[p.id] = img;
+}
+
 function handleMessage(data) {
   switch(data.type) {
     case 'welcome':
@@ -863,7 +998,10 @@ function handleMessage(data) {
       isOwner = data.is_owner;
       worldBlocks = data.world || {};
       gamePlayers = {};
-      (data.players || []).forEach(p => gamePlayers[p.id] = p);
+      (data.players || []).forEach(p => {
+        gamePlayers[p.id] = p;
+        if (p.id !== myId) ensurePlayerSkinLoaded(p);
+      });
       updateHostBadge();
       updateCamera();
       drawWorld();
@@ -875,11 +1013,13 @@ function handleMessage(data) {
       break;
     case 'player_joined':
       gamePlayers[data.id] = data;
+      if (data.id !== myId) ensurePlayerSkinLoaded(data);
       updatePlayerCount();
       drawWorld();
       break;
     case 'player_left':
       delete gamePlayers[data.id];
+      delete otherPlayerSkinCache[data.id];
       updatePlayerCount();
       drawWorld();
       addChat('Sistem', `${data.name} ayrıldı`);
@@ -979,35 +1119,14 @@ function drawWorld() {
   }
 
   // Oyuncular
-  const PW = 0.8, PH = 0.9; // PLAYER_W, PLAYER_H ile aynı
+  const PW = 0.8, PH = 0.9; // PLAYER_W, PLAYER_H ile aynı (hitbox - fizik motoruyla aynı)
   const now = performance.now();
   for (const [pid, p] of Object.entries(gamePlayers)) {
     const sx = (p.x - camX) * TILE;
     const sy = canvas.height - (p.y + PH - camY) * TILE;
     const w = PW * TILE, h = PH * TILE;
 
-    ctx.fillStyle = pid === myId ? '#FFD700' : '#FF5252';
-    ctx.fillRect(sx, sy, w, h);
-
-    // Yön göstergesi (küçük üçgen)
-    ctx.fillStyle = '#000';
-    if (p.facing === 'right') {
-      ctx.fillRect(sx + w - 6, sy + h/2 - 2, 4, 4);
-    } else {
-      ctx.fillRect(sx + 2, sy + h/2 - 2, 4, 4);
-    }
-
-    // Göz (bakış yönü testi: yukarı bak / eğil -> göz bebeği yukarı/aşağı kayar)
-    const eyeSize = 7;
-    const eyeX = p.facing === 'right' ? sx + w - eyeSize - 3 : sx + 3;
-    const eyeY = sy + 5;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(eyeX, eyeY, eyeSize, eyeSize);
-    let pupilOffset = eyeSize / 2 - 1; // normal: ortada
-    if (p.look === 'up') pupilOffset = 1;
-    else if (p.look === 'down') pupilOffset = eyeSize - 2;
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(eyeX + eyeSize/2 - 1, eyeY + pupilOffset, 2, 2);
+    drawPlayerSkin(ctx, sx, sy, w, h, p, pid === myId);
 
     // Etkileşim göstergesi (kısa süreli "✋")
     if (interactEffects[p.id] && now - interactEffects[p.id] < 600) {
@@ -1022,6 +1141,76 @@ function drawWorld() {
     ctx.textAlign = 'center';
     ctx.fillText(p.name, sx + w/2, sy - 2);
   }
+}
+
+// Skin tuvalindeki "hitbox çekirdeği" (kafa üstünden ayak tabanına kadar) bölgesi.
+// Oyun içinde bu bölge tam olarak hitbox kutusuna (PW x PH) ölçeklenip çizilir.
+// Background katmanı ise bu çekirdeğin etrafına, oranlı şekilde taşırılarak (hitbox dışına) çizilir.
+function getSkinCoreBounds() {
+  const minX = SKIN_PARTS.leftArm.x;
+  const maxX = SKIN_PARTS.rightArm.x + SKIN_PARTS.rightArm.w;
+  const minY = SKIN_PARTS.head.y;
+  const maxY = SKIN_PARTS.leftLeg.y + SKIN_PARTS.leftLeg.h;
+  return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+}
+
+function drawPlayerSkin(ctx, sx, sy, hitboxW, hitboxH, p, isMe) {
+  let img = null;
+  if (isMe) {
+    if (window.localSkinImage && window.localSkinImage.complete && window.localSkinImage.naturalWidth) {
+      img = window.localSkinImage;
+    }
+  } else {
+    const cached = otherPlayerSkinCache[p.id];
+    if (cached && cached.complete && cached.naturalWidth) img = cached;
+  }
+
+  if (!img) {
+    // Skin yoksa (henüz çizilmemiş veya başka oyuncunun skin verisi elimizde yok): basit renkli kutu (eski davranış)
+    ctx.fillStyle = isMe ? '#FFD700' : '#FF5252';
+    ctx.fillRect(sx, sy, hitboxW, hitboxH);
+    ctx.fillStyle = '#000';
+    if (p.facing === 'right') ctx.fillRect(sx + hitboxW - 6, sy + hitboxH/2 - 2, 4, 4);
+    else ctx.fillRect(sx + 2, sy + hitboxH/2 - 2, 4, 4);
+    drawSkinEye(ctx, sx, sy, hitboxW, hitboxH, p);
+    return;
+  }
+
+  const core = getSkinCoreBounds();
+  const scale = hitboxW / core.w; // çekirdek genişliği hitbox genişliğine sığacak şekilde ölçekle
+  const fullW = SKIN_SIZE * scale;
+  const fullH = SKIN_SIZE * scale;
+  // Tuvalin sol-üst köşesi, çekirdeğin hitbox'a göre konumuna göre kaydırılır
+  const drawX = sx - core.minX * scale;
+  const drawY = sy - core.minY * scale;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (p.facing === 'left') {
+    // Yatay aynalama: tuvali ters çiz
+    ctx.translate(drawX + fullW, drawY);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 0, 0, fullW, fullH);
+  } else {
+    ctx.drawImage(img, drawX, drawY, fullW, fullH);
+  }
+  ctx.restore();
+
+  drawSkinEye(ctx, sx, sy, hitboxW, hitboxH, p);
+}
+
+function drawSkinEye(ctx, sx, sy, w, h, p) {
+  // Göz (bakış yönü göstergesi: yukarı bak / eğil -> göz bebeği yukarı/aşağı kayar)
+  const eyeSize = 7;
+  const eyeX = p.facing === 'right' ? sx + w - eyeSize - 3 : sx + 3;
+  const eyeY = sy + 5;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(eyeX, eyeY, eyeSize, eyeSize);
+  let pupilOffset = eyeSize / 2 - 1;
+  if (p.look === 'up') pupilOffset = 1;
+  else if (p.look === 'down') pupilOffset = eyeSize - 2;
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(eyeX + eyeSize/2 - 1, eyeY + pupilOffset, 2, 2);
 }
 
 function onCanvasTap(e) {
@@ -1068,7 +1257,226 @@ function selectBlock(type) {
 // ---------------------------------------------------------
 // Hareket — Platform Kontrolleri
 // ---------------------------------------------------------
+// ---------------------------------------------------------
+// Skin Sistemi — Fonksiyonlar
+// ---------------------------------------------------------
+// Gerçek çözünürlük: 256x256 tuval, mantıksal piksel boyutu 4x4 ekran-pikseli
+// (yani 64x64 "mantıksal piksel" var - taşınabilir/performanslı boyama için)
+const SKIN_LOGICAL_RES = 64; // 256 / 4
+const SKIN_CELL = SKIN_SIZE / SKIN_LOGICAL_RES; // 4
+
+let skinOffscreen = null;     // gerçek skin verisini tutan offscreen canvas (256x256)
+let skinOffscreenCtx = null;
+
+function initSkinSystem() {
+  skinOffscreen = document.createElement('canvas');
+  skinOffscreen.width = SKIN_SIZE;
+  skinOffscreen.height = SKIN_SIZE;
+  skinOffscreenCtx = skinOffscreen.getContext('2d');
+  skinOffscreenCtx.imageSmoothingEnabled = false;
+  loadSkinFromStorage();
+}
+
+function loadSkinFromStorage() {
+  try {
+    const saved = localStorage.getItem(SKIN_STORAGE_KEY);
+    if (saved) {
+      window.localSkinImage = new Image();
+      window.localSkinImage.onload = () => {
+        skinOffscreenCtx.clearRect(0, 0, SKIN_SIZE, SKIN_SIZE);
+        skinOffscreenCtx.drawImage(window.localSkinImage, 0, 0);
+        renderSkinEditorCanvas();
+      };
+      window.localSkinImage.src = saved;
+      return;
+    }
+  } catch (e) {}
+  skinOffscreenCtx.clearRect(0, 0, SKIN_SIZE, SKIN_SIZE);
+}
+
+function getSkinDataUrl() {
+  return skinOffscreen.toDataURL('image/png');
+}
+
+function openSkinEditor() {
+  if (!skinOffscreen) initSkinSystem();
+  showScreen('skinEditorScreen');
+  setupSkinPalette();
+  renderSkinEditorCanvas();
+  updateSkinPreview();
+}
+
+function closeSkinEditor() {
+  showScreen('lobbyScreen');
+}
+
+function setupSkinPalette() {
+  const paletteEl = document.getElementById('skinPalette');
+  if (paletteEl.dataset.built) return;
+  paletteEl.dataset.built = '1';
+  SKIN_PALETTE.forEach(color => {
+    const sw = document.createElement('div');
+    sw.className = 'skin-palette-swatch';
+    sw.style.background = color;
+    sw.onclick = () => { document.getElementById('skinColorPicker').value = color; };
+    paletteEl.appendChild(sw);
+  });
+}
+
+document.querySelectorAll('.skin-part-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.skin-part-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    skinActivePart = tab.dataset.part;
+    renderSkinEditorCanvas();
+  });
+});
+
+function setSkinTool(tool) {
+  skinTool = tool;
+  document.getElementById('toolPaint').classList.toggle('active', tool === 'paint');
+  document.getElementById('toolErase').classList.toggle('active', tool === 'erase');
+}
+
+function clearSkinPart() {
+  const part = SKIN_PARTS[skinActivePart];
+  skinOffscreenCtx.clearRect(part.x, part.y, part.w, part.h);
+  renderSkinEditorCanvas();
+  updateSkinPreview();
+}
+
+function renderSkinEditorCanvas() {
+  const canvas = document.getElementById('skinCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, SKIN_SIZE, SKIN_SIZE);
+  ctx.drawImage(skinOffscreen, 0, 0);
+
+  // Aktif olmayan parçaları hafif karart, aktif parçayı çerçevele (görsel rehber)
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  for (const [name, p] of Object.entries(SKIN_PARTS)) {
+    if (name === skinActivePart) continue;
+    if (name === 'background' && skinActivePart !== 'background') continue; // arka planı her zaman normal göster
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+  }
+  const active = SKIN_PARTS[skinActivePart];
+  ctx.strokeStyle = '#64d9ff';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(active.x + 1, active.y + 1, active.w - 2, active.h - 2);
+
+  // Hitbox dışı (background) alanı belirgin yap
+  if (skinActivePart === 'background') {
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    const core = SKIN_PARTS.head;
+    const torso = SKIN_PARTS.torso;
+    const legL = SKIN_PARTS.leftLeg;
+    ctx.strokeRect(SKIN_PARTS.leftArm.x, core.y, SKIN_PARTS.rightArm.x + SKIN_PARTS.rightArm.w - SKIN_PARTS.leftArm.x, legL.y + legL.h - core.y);
+    ctx.setLineDash([]);
+  }
+}
+
+function getSkinCanvasCoords(e, canvasEl) {
+  const rect = canvasEl.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  const x = (clientX - rect.left) / rect.width * SKIN_SIZE;
+  const y = (clientY - rect.top) / rect.height * SKIN_SIZE;
+  return { x, y };
+}
+
+function paintSkinPixel(x, y) {
+  const part = SKIN_PARTS[skinActivePart];
+  if (x < part.x || x >= part.x + part.w || y < part.y || y >= part.y + part.h) return; // sadece aktif parça içine boyanabilir
+
+  const cellX = Math.floor(x / SKIN_CELL) * SKIN_CELL;
+  const cellY = Math.floor(y / SKIN_CELL) * SKIN_CELL;
+
+  if (skinTool === 'erase') {
+    skinOffscreenCtx.clearRect(cellX, cellY, SKIN_CELL, SKIN_CELL);
+  } else {
+    skinOffscreenCtx.fillStyle = document.getElementById('skinColorPicker').value;
+    skinOffscreenCtx.fillRect(cellX, cellY, SKIN_CELL, SKIN_CELL);
+  }
+  renderSkinEditorCanvas();
+  updateSkinPreview();
+}
+
+let skinDrawing = false;
+function bindSkinCanvasEvents() {
+  const canvas = document.getElementById('skinCanvas');
+  const start = (e) => {
+    e.preventDefault();
+    skinDrawing = true;
+    const { x, y } = getSkinCanvasCoords(e, canvas);
+    paintSkinPixel(x, y);
+  };
+  const move = (e) => {
+    if (!skinDrawing) return;
+    e.preventDefault();
+    const { x, y } = getSkinCanvasCoords(e, canvas);
+    paintSkinPixel(x, y);
+  };
+  const end = () => { skinDrawing = false; };
+
+  canvas.addEventListener('pointerdown', start);
+  canvas.addEventListener('pointermove', move);
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+  canvas.addEventListener('pointerleave', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+function updateSkinPreview() {
+  const prev = document.getElementById('skinPreviewCanvas');
+  const ctx = prev.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, 64, 64);
+  // Basit önizleme: kafa + gövde + kollar + bacaklar çekirdek bölgesini küçültüp göster
+  const minX = SKIN_PARTS.leftArm.x, maxX = SKIN_PARTS.rightArm.x + SKIN_PARTS.rightArm.w;
+  const minY = SKIN_PARTS.head.y, maxY = SKIN_PARTS.leftLeg.y + SKIN_PARTS.leftLeg.h;
+  ctx.drawImage(skinOffscreen, minX, minY, maxX - minX, maxY - minY, 0, 0, 64, 64);
+}
+
+function saveSkin() {
+  try {
+    const dataUrl = getSkinDataUrl();
+    localStorage.setItem(SKIN_STORAGE_KEY, dataUrl);
+    if (window.localSkinImage) window.localSkinImage.src = dataUrl;
+    else {
+      window.localSkinImage = new Image();
+      window.localSkinImage.src = dataUrl;
+    }
+
+    // Giriş yapılmış hesap varsa, kafa bölgesinden küçük bir profil resmi üretip sunucuya gönder
+    if (currentUser) {
+      const head = SKIN_PARTS.head;
+      const headCanvas = document.createElement('canvas');
+      headCanvas.width = 64; headCanvas.height = 64;
+      const headCtx = headCanvas.getContext('2d');
+      headCtx.imageSmoothingEnabled = false;
+      headCtx.drawImage(skinOffscreen, head.x, head.y, head.w, head.h, 0, 0, 64, 64);
+      const headDataUrl = headCanvas.toDataURL('image/png');
+      fetch('/api/update-profile', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({profile_picture: headDataUrl})
+      }).then(r => r.json()).then(data => {
+        if (data.user) currentUser = data.user;
+      }).catch(() => {});
+    }
+
+    alert('Karakter kaydedildi! 🎨');
+  } catch (e) {
+    alert('Kaydetme hatası: ' + e.message);
+  }
+}
+
 let inputState = {left: false, right: false, jump: false, up: false, down: false};
+
 
 function setInput(key, value) {
   if (inputState[key] === value) return;
@@ -1224,6 +1632,8 @@ if ('serviceWorker' in navigator) {
 }
 
 checkSession();
+initSkinSystem();
+bindSkinCanvasEvents();
 </script>
 </body>
-     </html>
+                                             </html>
