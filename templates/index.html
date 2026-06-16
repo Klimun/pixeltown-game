@@ -37,6 +37,12 @@
     width: 80vw; max-width: 300px; outline: none;
   }
   input[type=text]:focus { border-color: #64d9ff; }
+  input[type=email], input[type=password] {
+    background: #1e1e2e; border: 2px solid #333; color: #eee;
+    padding: 12px 16px; border-radius: 8px; font-size: 1rem;
+    width: 80vw; max-width: 300px; outline: none; font-family: monospace;
+  }
+  input[type=email]:focus, input[type=password]:focus { border-color: #64d9ff; }
   .btn {
     padding: 12px 24px; border: none; border-radius: 8px;
     font-size: 1rem; cursor: pointer; font-family: monospace;
@@ -45,6 +51,54 @@
   .btn-primary { background: #2196F3; color: #fff; }
   .btn-green { background: #4CAF50; color: #fff; }
   .btn-red { background: #E53935; color: #fff; }
+
+  /* HESAP / GİRİŞ-KAYIT */
+  #loginScreen { overflow-y: auto; padding: 20px 0; }
+  .auth-tabs { display: flex; width: 80vw; max-width: 300px; gap: 4px; }
+  .auth-tab {
+    flex: 1; padding: 10px; background: #1e1e2e; border: none; color: #888;
+    border-radius: 8px 8px 0 0; cursor: pointer; font-family: monospace; font-size: 0.9rem;
+  }
+  .auth-tab.active { background: #2a2a3e; color: #64d9ff; }
+  .auth-form { display: flex; flex-direction: column; gap: 10px; align-items: center; width: 100%; }
+  .auth-link {
+    color: #64d9ff; font-size: 0.8rem; text-align: center; cursor: pointer;
+    text-decoration: underline;
+  }
+  .auth-error { color: #FF5252; font-size: 0.8rem; text-align: center; min-height: 1em; }
+  .auth-divider {
+    color: #555; font-size: 0.8rem; display: flex; align-items: center;
+    width: 80vw; max-width: 300px; gap: 8px;
+  }
+  .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: #333; }
+
+  /* GENEL POPUP */
+  .popup-overlay {
+    display: none; position: fixed; inset: 0;
+    background: #000a; z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .popup-overlay.show { display: flex; }
+
+  /* PROFİL EKRANI */
+  #profileScreen { padding: 12px; gap: 12px; overflow-y: auto; }
+  .profile-content { display: flex; flex-direction: column; gap: 10px; padding-bottom: 24px; }
+  .profile-avatar {
+    width: 72px; height: 72px; border-radius: 50%; align-self: center;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem; font-weight: bold; color: #fff; background: #333;
+    overflow: hidden;
+  }
+  .profile-content label { font-size: 0.8rem; color: #aaa; margin-top: 4px; }
+  .profile-content input, .profile-content select {
+    background: #1e1e2e; border: 2px solid #333; color: #eee;
+    padding: 10px 12px; border-radius: 8px; font-size: 0.95rem;
+    font-family: monospace; outline: none; width: 100%;
+  }
+  .profile-content input:disabled { color: #777; }
+  .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #ddd; }
+  .toggle-row input { width: auto; }
+  .profile-content h3 { color: #64d9ff; font-size: 0.9rem; margin-top: 8px; }
 
   /* LOBİ EKRANI */
   #lobbyScreen { padding: 12px; gap: 10px; }
@@ -168,17 +222,94 @@
 </head>
 <body>
 
-<!-- GİRİŞ EKRANI -->
+<!-- GİRİŞ / KAYIT EKRANI -->
 <div id="loginScreen" class="screen active">
   <div class="logo">🏙️ Pixel<span>Town</span></div>
-  <input type="text" id="nameInput" placeholder="Kullanıcı adın..." maxlength="16">
-  <button class="btn btn-primary" onclick="enterLobby()">Lobiye Gir →</button>
+  <p id="authStatus" style="font-size:0.8rem;color:#666;min-height:1em"></p>
+
+  <div class="auth-tabs">
+    <button class="auth-tab active" id="loginTabBtn" onclick="switchAuthTab('login')">Giriş Yap</button>
+    <button class="auth-tab" id="registerTabBtn" onclick="switchAuthTab('register')">Kayıt Ol</button>
+  </div>
+
+  <div id="loginForm" class="auth-form">
+    <input type="email" id="loginEmail" placeholder="E-posta" autocomplete="email">
+    <input type="password" id="loginPassword" placeholder="Şifre" autocomplete="current-password">
+    <button class="btn btn-primary" onclick="doLogin()">Giriş Yap →</button>
+    <p class="auth-link" onclick="showForgotPopup()">Şifremi unuttum</p>
+    <p id="loginError" class="auth-error"></p>
+  </div>
+
+  <div id="registerForm" class="auth-form" style="display:none">
+    <input type="text" id="regOriginalName" placeholder="Adın Soyadın (orijinal ad)" maxlength="100">
+    <input type="text" id="regUsername" placeholder="Takma ad (oyunda görünür)" maxlength="20">
+    <input type="email" id="regEmail" placeholder="E-posta" autocomplete="email">
+    <input type="password" id="regPassword" placeholder="Şifre (en az 6 karakter)" autocomplete="new-password">
+    <button class="btn btn-primary" onclick="doRegister()">Hesap Oluştur →</button>
+    <p id="registerError" class="auth-error"></p>
+  </div>
+
+  <div class="auth-divider">veya</div>
+  <input type="text" id="nameInput" placeholder="Misafir adı..." maxlength="16">
+  <button class="btn btn-green" onclick="enterAsGuest()">Misafir Olarak Gir →</button>
+</div>
+
+<!-- ŞİFRE SIFIRLAMA EKRANI (e-postadaki linkten gelinir) -->
+<div id="resetPasswordScreen" class="screen">
+  <div class="logo">🏙️ Pixel<span>Town</span></div>
+  <div class="auth-form">
+    <p style="font-size:0.85rem;color:#aaa;text-align:center;width:80vw;max-width:300px">
+      Yeni şifreni belirle:
+    </p>
+    <input type="hidden" id="resetTokenInput">
+    <input type="password" id="resetPassword1" placeholder="Yeni şifre">
+    <input type="password" id="resetPassword2" placeholder="Yeni şifre (tekrar)">
+    <button class="btn btn-primary" onclick="doResetPassword()">Şifreyi Güncelle</button>
+    <p id="resetError" class="auth-error"></p>
+  </div>
+</div>
+
+<!-- PROFİL EKRANI -->
+<div id="profileScreen" class="screen">
+  <div class="lobby-header">
+    <button class="btn btn-red" style="width:auto;padding:8px 12px" onclick="showScreen('lobbyScreen')">←</button>
+    <h2>👤 Profilim</h2>
+  </div>
+  <div class="profile-content">
+    <div id="profileAvatar" class="profile-avatar"></div>
+    <p style="font-size:0.78rem;color:#888;text-align:center">
+      Karakter sistemi tamamlandığında profil resmin, karakterinin kafasından otomatik oluşturulacak.
+    </p>
+
+    <label>Takma Ad (oyunda görünür)</label>
+    <input type="text" id="profileUsername" maxlength="20">
+
+    <label>Orijinal Ad</label>
+    <input type="text" id="profileOriginalName" disabled>
+
+    <label>E-posta</label>
+    <input type="text" id="profileEmail" disabled>
+
+    <h3>Gizlilik</h3>
+    <label class="toggle-row"><input type="checkbox" id="privShowRealName"> Orijinal adımı diğer oyunculara göster</label>
+    <label class="toggle-row"><input type="checkbox" id="privShowOnline"> Çevrimiçi durumumu göster</label>
+    <label>Kimler bana mesaj gönderebilir?</label>
+    <select id="privAllowMessages">
+      <option value="everyone">Herkes</option>
+      <option value="friends">Sadece Arkadaşlar</option>
+      <option value="none">Hiç kimse</option>
+    </select>
+
+    <button class="btn btn-primary" onclick="saveProfile()">Kaydet</button>
+    <p id="profileMsg" class="auth-error"></p>
+    <button class="btn btn-red" onclick="doLogout()">Çıkış Yap</button>
+  </div>
 </div>
 
 <!-- LOBİ EKRANI -->
 <div id="lobbyScreen" class="screen">
   <div class="lobby-header">
-    <button class="btn btn-red" style="width:auto;padding:8px 12px" onclick="showScreen('loginScreen')">←</button>
+    <button class="btn btn-primary" style="width:auto;padding:8px 12px" onclick="openProfile()">👤</button>
     <h2>🏙️ PixelTown Lobisi</h2>
     <button class="btn btn-primary" style="width:auto;padding:8px 12px" onclick="loadRooms()">🔄</button>
   </div>
@@ -235,12 +366,26 @@
   </div>
 </div>
 
+<!-- POPUP: Şifremi Unuttum -->
+<div id="forgotPopup" class="popup-overlay">
+  <div class="popup-box">
+    <h3>Şifremi Unuttum</h3>
+    <input type="email" id="forgotEmail" placeholder="E-posta">
+    <div class="popup-btns">
+      <button class="btn btn-green" onclick="doForgotPassword()">Gönder</button>
+      <button class="btn btn-red" onclick="hideForgotPopup()">İptal</button>
+    </div>
+    <p id="forgotMsg" style="font-size:0.8rem;color:#aaa;text-align:center"></p>
+  </div>
+</div>
+
 <script>
 // ---------------------------------------------------------
 // Durum
 // ---------------------------------------------------------
 const TILE = 32;
 let myId = null, myName = "Oyuncu";
+let currentUser = null; // giriş yapılmış hesap (varsa) - { id, email, original_name, username, profile_picture, privacy_settings }
 let worldBlocks = {}, gamePlayers = {};
 let selectedBlock = "grass";
 let camX = 0, camY = 0;
@@ -339,11 +484,230 @@ function showScreen(id) {
   if (id === 'gameScreen') initCanvas();
 }
 
-function enterLobby() {
+// ---------------------------------------------------------
+// Hesap Sistemi
+// ---------------------------------------------------------
+
+async function checkSession() {
+  // Şifre sıfırlama linkinden geliniyorsa doğrudan o ekranı göster
+  const params = new URLSearchParams(location.search);
+  const resetToken = params.get('reset_token');
+  if (resetToken) {
+    document.getElementById('resetTokenInput').value = resetToken;
+    showScreen('resetPasswordScreen');
+    return;
+  }
+
+  const statusEl = document.getElementById('authStatus');
+  statusEl.textContent = 'Sunucuya bağlanılıyor...';
+
+  try {
+    const r = await fetch('/api/me');
+    const data = await r.json();
+    statusEl.textContent = '';
+    if (data.user) {
+      currentUser = data.user;
+      myName = currentUser.username;
+      showScreen('lobbyScreen');
+      loadRooms();
+      return;
+    }
+  } catch (e) {
+    statusEl.textContent = 'Sunucu uyandırılıyor, lütfen bekleyin...';
+    setTimeout(checkSession, 2500);
+    return;
+  }
+
+  showScreen('loginScreen');
+}
+
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('loginForm').style.display = isLogin ? 'flex' : 'none';
+  document.getElementById('registerForm').style.display = isLogin ? 'none' : 'flex';
+  document.getElementById('loginTabBtn').classList.toggle('active', isLogin);
+  document.getElementById('registerTabBtn').classList.toggle('active', !isLogin);
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password})
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.error || 'Giriş başarısız.'; return; }
+    currentUser = data.user;
+    myName = currentUser.username;
+    showScreen('lobbyScreen');
+    loadRooms();
+  } catch (e) {
+    errEl.textContent = 'Bağlantı hatası.';
+  }
+}
+
+async function doRegister() {
+  const original_name = document.getElementById('regOriginalName').value.trim();
+  const username = document.getElementById('regUsername').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const errEl = document.getElementById('registerError');
+  errEl.textContent = '';
+  try {
+    const r = await fetch('/api/register', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({original_name, username, email, password})
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.error || 'Kayıt başarısız.'; return; }
+    currentUser = data.user;
+    myName = currentUser.username;
+    showScreen('lobbyScreen');
+    loadRooms();
+  } catch (e) {
+    errEl.textContent = 'Bağlantı hatası.';
+  }
+}
+
+function enterAsGuest() {
   const n = document.getElementById('nameInput').value.trim();
-  myName = n || "Oyuncu";
+  myName = n || "Misafir";
+  currentUser = null;
   showScreen('lobbyScreen');
   loadRooms();
+}
+
+async function doLogout() {
+  try { await fetch('/api/logout', {method: 'POST'}); } catch (e) {}
+  currentUser = null;
+  myName = "Oyuncu";
+  showScreen('loginScreen');
+}
+
+function showForgotPopup() {
+  document.getElementById('forgotEmail').value = '';
+  const msgEl = document.getElementById('forgotMsg');
+  msgEl.textContent = '';
+  msgEl.style.color = '#aaa';
+  document.getElementById('forgotPopup').classList.add('show');
+}
+
+function hideForgotPopup() {
+  document.getElementById('forgotPopup').classList.remove('show');
+}
+
+async function doForgotPassword() {
+  const email = document.getElementById('forgotEmail').value.trim();
+  const msgEl = document.getElementById('forgotMsg');
+  try {
+    const r = await fetch('/api/forgot-password', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email})
+    });
+    const data = await r.json();
+    msgEl.style.color = '#4CAF50';
+    msgEl.textContent = data.message || 'Bağlantı gönderildi.';
+  } catch (e) {
+    msgEl.style.color = '#FF5252';
+    msgEl.textContent = 'Bağlantı hatası.';
+  }
+}
+
+async function doResetPassword() {
+  const token = document.getElementById('resetTokenInput').value;
+  const pw1 = document.getElementById('resetPassword1').value;
+  const pw2 = document.getElementById('resetPassword2').value;
+  const errEl = document.getElementById('resetError');
+  errEl.style.color = '#FF5252';
+  errEl.textContent = '';
+
+  if (pw1.length < 6) { errEl.textContent = 'Şifre en az 6 karakter olmalı.'; return; }
+  if (pw1 !== pw2) { errEl.textContent = 'Şifreler eşleşmiyor.'; return; }
+
+  try {
+    const r = await fetch('/api/reset-password', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({token, new_password: pw1})
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.error || 'Bir hata oluştu.'; return; }
+    history.replaceState({}, '', location.pathname);
+    errEl.style.color = '#4CAF50';
+    errEl.textContent = 'Şifren güncellendi! Giriş ekranına yönlendiriliyorsun...';
+    setTimeout(() => showScreen('loginScreen'), 1500);
+  } catch (e) {
+    errEl.textContent = 'Bağlantı hatası.';
+  }
+}
+
+// ---------------------------------------------------------
+// Profil
+// ---------------------------------------------------------
+
+function renderAvatar(el, user) {
+  if (user && user.profile_picture) {
+    el.style.background = 'transparent';
+    el.innerHTML = `<img src="${user.profile_picture}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+    return;
+  }
+  const name = (user && user.username) ? user.username : '?';
+  const letter = name.charAt(0).toUpperCase();
+  const colors = ['#FF5252', '#4CAF50', '#2196F3', '#FFD700', '#9C27B0', '#FF9800', '#64d9ff'];
+  const color = colors[name.charCodeAt(0) % colors.length];
+  el.style.background = color;
+  el.innerHTML = letter;
+}
+
+function openProfile() {
+  if (!currentUser) {
+    // Misafir: hesap yok, giriş/kayıt ekranına yönlendir
+    showScreen('loginScreen');
+    return;
+  }
+  document.getElementById('profileUsername').value = currentUser.username;
+  document.getElementById('profileOriginalName').value = currentUser.original_name;
+  document.getElementById('profileEmail').value = currentUser.email;
+  document.getElementById('privShowRealName').checked = !!currentUser.privacy_settings.show_real_name;
+  document.getElementById('privShowOnline').checked = !!currentUser.privacy_settings.show_online_status;
+  document.getElementById('privAllowMessages').value = currentUser.privacy_settings.allow_messages;
+  renderAvatar(document.getElementById('profileAvatar'), currentUser);
+  document.getElementById('profileMsg').textContent = '';
+  showScreen('profileScreen');
+}
+
+async function saveProfile() {
+  const username = document.getElementById('profileUsername').value.trim();
+  const privacy_settings = {
+    show_real_name: document.getElementById('privShowRealName').checked,
+    show_online_status: document.getElementById('privShowOnline').checked,
+    allow_messages: document.getElementById('privAllowMessages').value,
+  };
+  const msgEl = document.getElementById('profileMsg');
+  msgEl.textContent = '';
+  try {
+    const r = await fetch('/api/update-profile', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, privacy_settings})
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      msgEl.style.color = '#FF5252';
+      msgEl.textContent = data.error || 'Bir hata oluştu.';
+      return;
+    }
+    currentUser = data.user;
+    myName = currentUser.username;
+    renderAvatar(document.getElementById('profileAvatar'), currentUser);
+    msgEl.style.color = '#4CAF50';
+    msgEl.textContent = 'Kaydedildi!';
+  } catch (e) {
+    msgEl.style.color = '#FF5252';
+    msgEl.textContent = 'Bağlantı hatası.';
+  }
 }
 
 // ---------------------------------------------------------
@@ -851,13 +1215,15 @@ function updateHostBadge() {
 }
 
 // ---------------------------------------------------------
-// Service Worker Kaydı (PWA/APK gereksinimi)
+// Servis Worker Kaydı (PWA/APK gereksinimi) + Başlangıç
 // ---------------------------------------------------------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/static/sw.js').catch(() => {});
   });
 }
+
+checkSession();
 </script>
 </body>
- </html>
+     </html>
